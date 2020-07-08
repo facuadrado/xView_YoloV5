@@ -1,16 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[71]:
-
-
-# get_ipython().run_line_magic('reload_ext', 'autoreload')
-# get_ipython().run_line_magic('autoreload', '2')
-
-
-# In[72]:
-
-
 #export
 from fastai import *
 from fastai.vision import *
@@ -26,9 +13,6 @@ import imageio
 import os
 import pandas as pd
 
-
-# In[73]:
-
 def classes2index():
     class2index = dict()
     c = 0
@@ -41,10 +25,6 @@ original_dataset_path = 'C:/Users/facua/Desktop/Boeing/train_images/'
 original_geojson_path = 'C:/Users/facua/Desktop/Boeing/xView_train.geojson'
 class_labels_path = 'C:/Users/facua/Desktop/Boeing/xview_class_labels.txt'
 
-
-# In[74]:
-
-
 # Look at an image from original dataset
 image_name = '10.tif'
 image_str = original_dataset_path + image_name
@@ -54,10 +34,6 @@ plt.figure(figsize=(20,20))
 plt.axis('off')
 plt.imshow(arr)
 
-
-# In[75]:
-
-
 # loading all coords, images, classes
 coords, images, classes = wv.get_labels(original_geojson_path)
 # only for specific image
@@ -65,17 +41,10 @@ icoords = coords[images == image_name]
 iclasses = classes[images == image_name].astype(np.int64)
 
 
-# In[76]:
-
-
 labels = {}
 with open(class_labels_path) as f:
     for row in csv.reader(f):
         labels[int(row[0].split(":")[0])] = row[0].split(":")[1]
-
-
-# In[77]:
-
 
 # visualize the same image with the bboxes
 
@@ -83,9 +52,6 @@ typed_id = aug.draw_bboxes(arr, icoords)
 plt.figure(figsize=(20,20))
 plt.axis('off')
 plt.imshow(typed_id)
-
-
-# In[78]:
 
 
 # Remove invalid Type IDs (aka type IDs without cooresponding labels)
@@ -96,18 +62,12 @@ xclasses = np.delete(classes, i) # list of object type IDs
 len(i) # number of indicies removed
 
 
-# In[79]:
-
-
 # remove references to non-existent image 1395.tif
 i, = np.where(ximages == '1395.tif')
 ximages = np.delete(ximages, i) # list of object images
 xcoords = np.delete(xcoords, i, axis=0) # list of bbox coords
 xclasses = np.delete(xclasses, i) # list of object type ids
 len(i) # number of indicies removed
-
-
-# In[80]:
 
 
 # identify coords for same image with different classes
@@ -136,9 +96,6 @@ for invalid in invalid_match:
     num_conflict += 1
 
 
-# In[81]:
-
-
 # after taking a look at competing labels -> 2571.tif conflict should be bus (type_id=19)
 # 1141.tif conflict should be removed. Bbox doesn't coorespond to any classification
 i = np.array([invalid_match[0][0], invalid_match[1][0], invalid_match[1][1]])
@@ -149,26 +106,8 @@ len(i) # number of indicies removed
 
 
 train_str = original_dataset_path
-# train_str = './data/train_images/'
-# image_name = '1141.tif'
-# image_str = train_str + image_name
-# arr = wv.get_image(image_str)
-# ncoords = np.resize(xcoords[invalid_match[1][0]], (1,4))
-# typed_id = aug.draw_bboxes(arr, ncoords)
-# plt.figure(figsize=(100,100))
-# plt.axis('off')
-# plt.imshow(typed_id)
-# ncoords
-
-
-# In[100]:
-
 
 np.unique(ximages)
-
-
-# In[97]:
-
 
 # chip_shape = (32*22,32*22)
 chip_shape = (700,700)
@@ -176,10 +115,6 @@ chipped_dataset_path = 'C:/Users/facua/Desktop/Boeing/chipped2_'+str(chip_shape[
 # create directory if it doesn't already exist
 if not os.path.exists(chipped_dataset_path):
     os.makedirs(chipped_dataset_path)
-
-
-# In[101]:
-
 
 # Create the chipped dataset
 
@@ -230,17 +165,11 @@ for image_name in tqdm(np.unique(ximages)):
 assert image_id-1 == sum(num_chips), 'Number of image IDs does not match number of chips created'
 
 
-# In[102]:
-
-
 # Create COCO-style JSON for chipped dataset
 chippedcategories = [dict(id=i, name=l) for i, l in labels.items()]
 text = json.dumps({'images': chippedimages, 'type': 'instances', 'annotations': chippedannotations, 'categories': chippedcategories}, indent=4)
 with open(chipped_dataset_path+'chippedxView.json', 'w') as outfile:
     outfile.write(text)
-
-
-# In[103]:
 
 
 # read it back in to check it worked
@@ -318,62 +247,14 @@ with open(chipped_dataset_path+'train_xview.txt','w') as outfile:
 train_images, train_lbl_bbox = get_annotations(chipped_dataset_path+'chippedxView.json')
 # Note: get_annotations is only reading in the chips with objects in them
 
-
-# In[104]:
-
-
 print(len(train_images))
 print(train_images[0:8])
-
-
-# In[105]:
 
 
 #list of num of labels for specific image
 x = list(range(len(train_lbl_bbox[1][1])))
 
 
-# In[106]:
-
-
 img = open_image(chipped_dataset_path+train_images[1])
 bbox = ImageBBox.create(*img.size, train_lbl_bbox[1][0], x, classes=train_lbl_bbox[1][1])
 img.show(figsize=(20,20), y=bbox)
-
-
-# # In[141]:
-
-
-# def imageSize(images, image_dir):
-#     width = []
-#     height = []
-#     for x in np.unique(images):
-#         image_str = image_dir + x
-#         img = open_image(image_str)
-#         width.append(img.size[0])
-#         height.append(img.size[1])
-#     return width, height
-
-
-# # In[199]:
-
-
-# def outofboundsCoords(images, coords, image_dir):
-#     i = []
-#     for x in np.unique(images):
-#         imageCoords = coords[images == x]
-#         image_str = image_dir + x
-#         img = open_image(image_str)
-#         w, h = img.size
-#         for y in imageCoords:
-#             xmin, ymin, xmax, ymax = y
-#             if (xmin < 0) | (ymin < 0) | (xmax > w) | (ymax > h):
-#                 i.append((x,y))
-#     return i
-
-
-# # In[ ]:
-
-
-
-
