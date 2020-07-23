@@ -394,6 +394,36 @@ class FocalLoss(nn.Module):
         else:  # 'none'
             return loss
 
+class ReducedFocalLoss(nn.Module):
+    # Wraps focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5)
+    def __init__(self, loss_fcn, gamma=1.5, alpha=0.25):
+        super(ReducedFocalLoss, self).__init__()
+        self.loss_fcn = loss_fcn  # must be nn.BCEWithLogitsLoss()
+        self.gamma = gamma
+        self.alpha = alpha
+        self.reduction = loss_fcn.reduction
+        self.loss_fcn.reduction = 'none'  # required to apply FL to each element
+
+    def forward(self, pred, true):
+        loss = self.loss_fcn(pred, true)
+        # p_t = torch.exp(-loss)
+        # loss *= self.alpha * (1.000001 - p_t) ** self.gamma  # non-zero power for gradient stability
+
+        # TF implementation https://github.com/tensorflow/addons/blob/v0.7.1/tensorflow_addons/losses/focal_loss.py
+        pred_prob = torch.sigmoid(pred)  # prob from logits
+        p_t = true * pred_prob + (1 - true) * (1 - pred_prob)
+        alpha_factor = true * self.alpha + (1 - true) * (1 - self.alpha)
+        modulating_factor = (((1.0 - p_t) ** self.gamma)/0.5).type(torch.float16)
+        modulating_factor = torch.where(p_t < 0.5, p_t, modulating_factor)
+        loss *= alpha_factor * modulating_factor
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:  # 'none'
+            return loss
+
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
     # return positive, negative label smoothing BCE targets
@@ -416,6 +446,15 @@ class BCEBlurWithLogitsLoss(nn.Module):
         loss *= alpha_factor
         return loss.mean()
 
+def modelinfo(model):
+    nparams = sum(x.numel() for x in model.parameters())
+    ngradients = sum(x.numel() for x in model.parameters() if x.requires_grad)
+    print('\n%4s %70s %9s %12s %20s %12s %12s' % ('', 'name', 'gradient', 'parameters', 'shape', 'mu', 'sigma'))
+    for i, (name, p) in enumerate(model.named_parameters()):
+        name = name.replace('module_list.', '')
+        print('%4g %70s %9s %12g %20s %12g %12g' % (
+            i, name, p.requires_grad, p.numel(), list(p.shape), p.mean(), p.std()))
+    print('\n%g layers, %g parameters, %g gradients' % (i + 1, nparams, ngradients))
 
 def compute_loss(p, targets, model):  # predictions, targets, model
     ft = torch.cuda.FloatTensor if p[0].is_cuda else torch.Tensor
