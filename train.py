@@ -37,14 +37,14 @@ hyp = {'lr0': 0.001,  # initial learning rate (SGD=1E-2, Adam=1E-3)
        'obj_pw': 1.0,  # obj BCELoss positive_weight
        'iou_t': 0.20,  # iou training threshold
        'anchor_t': 4.0,  # anchor-multiple threshold
-       'fl_gamma': 1.5,  # focal loss gamma (efficientDet default is gamma=1.5)
+       'fl_gamma': 2.5,  # focal loss gamma (efficientDet default is gamma=1.5)
        'hsv_h': 0.014,  # image HSV-Hue augmentation (fraction)
        'hsv_s': 0.68,  # image HSV-Saturation augmentation (fraction)
        'hsv_v': 0.36,  # image HSV-Value augmentation (fraction)
-       'degrees': 0.0,  # image rotation (+/- deg)
-       'translate': 0.0,  # image translation (+/- fraction)
-       'scale': 0.5,  # image scale (+/- gain)
-       'shear': 0.0}  # image shear (+/- deg)
+       'degrees': 20.0,  # image rotation (+/- deg)
+       'translate': 0.01,  # image translation (+/- fraction)
+       'scale': 0.3,  # image scale (+/- gain)
+       'shear': 3.0}  # image shear (+/- deg)
 print(hyp)
 
 # Overwrite hyp with hyp*.txt (optional)
@@ -75,10 +75,31 @@ def train(hyp):
     # Remove previous results
     for f in glob.glob('*_batch*.jpg') + glob.glob(results_file):
         os.remove(f)
-
-    # Create model
-    model = Model(opt.cfg, nc=data_dict['nc']).to(device)
-
+    
+    if opt.transfer:
+        model = Model(opt.cfg, nc=data_dict['nc']).requires_grad_(False)
+        try: 
+            print("Enter layer to unfreeze valid range 0 to " + str(len(model.model)-1) +
+                                            ". Multiple layers can be unfrozen. Please enter one at a time. When done, prompt empty response.")
+            while True:
+                unfreeze_layer = (int(input("Enter layer to unfreeze: ")))
+                if unfreeze_layer >= 0 or unfreeze_layer <= len(model.model)-1:
+                    [x.requires_grad_(True) for x in model.model[unfreeze_layer].parameters()] 
+                    print('Unfroze layer: ' + str(unfreeze_layer) + '.')
+                else:
+                    print('Invalid layer. Valid range 0 to ' + str(len(model.model)-1) +'.')
+        except:
+            print('#####################################')
+            print('#####    Transfer Learning...   #####')
+            print('#####################################')
+      
+        model = model.to(device)
+        modelinfo(model)
+        
+    else:
+        model = Model(opt.cfg, nc=data_dict['nc']).to(device)
+        modelinfo(model)
+        
     # Image sizes
     gs = int(max(model.stride))  # grid size (max stride)
     imgsz, imgsz_test = [check_img_size(x, gs) for x in opt.img_size]  # verify imgsz are gs-multiples
@@ -360,7 +381,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=750)
     parser.add_argument('--batch-size', type=int, default=32)
-    parser.add_argument('--cfg', type=str, default='models/yolov5s.yaml', help='*.cfg path')
+    parser.add_argument('--cfg', type=str, default='models/yolov5x.yaml', help='*.cfg path')
     parser.add_argument('--data', type=str, default='data/xview.yaml', help='*.data path')
     parser.add_argument('--img-size', nargs='+', type=int, default=[700, 700], help='train,test sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
@@ -376,6 +397,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--adam', action='store_true', help='use adam optimizer')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%')
+    parser.add_argument('--transfer', action='store_true', help='transfer learning')
     parser.add_argument('--single-cls', action='store_true', help='train as single-class dataset')
     opt = parser.parse_args()
     opt.weights = last if opt.resume and not opt.weights else opt.weights
